@@ -1,12 +1,14 @@
 [package]
 name = "libarmv8"
+authors = ["Manos Pitsidianakis <manos@pitsidianak.is>"]
 version = "0.1.0"
 edition = "2021"
+license = "EUPL-1.2 OR GPL-3.0-or-later"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "libarmv8"
 crate-type = ["cdylib"]
 
 [dependencies]
+mycelium-bitfield = "0.1.5"
 pyo3 = "0.20.0"

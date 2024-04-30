@@ -1,4 +1,14 @@
+// SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
+
 use pyo3::prelude::*;
+
+mod shared;
+mod shared_memory;
+mod shared_mpam;
+mod shared_translation;
+mod shared_vmsa;
+
+mod translation64;
 
 /// Formats the sum of two numbers as string.
 #[pyfunction]
