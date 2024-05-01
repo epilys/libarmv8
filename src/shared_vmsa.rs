@@ -1,77 +1,101 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
+use std::mem::MaybeUninit;
+
 use crate::shared::*;
 use crate::shared_memory::*;
 use crate::shared_translation::*;
-// Library pseudocode for shared/translation/vmsa/AddressDescriptor
 
-// constant integer FINAL_LEVEL = 3;
+/// Library pseudocode for shared/translation/vmsa/AddressDescriptor
 
-// // AddressDescriptor
-// // =================
-// // Descriptor used to access the underlying memory array.
+pub const FINAL_LEVEL: u64 = 3;
 
-// type AddressDescriptor is (
-//    FaultRecord      fault,      // fault.statuscode indicates whether the address is valid
-//    MemoryAttributes memattrs,
-//    FullAddress      paddress,
-//    boolean          s1assured,  // Stage 1 Assured Translation Property
-//    boolean          s2fs1mro,   // Stage 2 MRO permission for Stage 1
-//    bits(16)         mecid,      // FEAT_MEC: Memory Encryption Context ID
-//    bits(64)         vaddress
-// )
+/// AddressDescriptor
+/// =================
+/// Descriptor used to access the underlying memory array.
 
-// Library pseudocode for shared/translation/vmsa/ContiguousSize
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct AddressDescriptor {
+    /// fault.statuscode indicates whether the address is valid
+    pub fault: FaultRecord,
+    pub memattrs: MemoryAttributes,
+    pub paddress: FullAddress,
+    /// Stage 1 Assured Translation Property
+    pub s1assured: bool,
+    /// Stage 2 MRO permission for Stage 1
+    pub s2fs1mro: bool,
+    /// FEAT_MEC: Memory Encryption Context ID bits(16)
+    pub mecid: u16,
+    /// bits(64)
+    pub vaddress: u64,
+}
 
-// // ContiguousSize()
-// // ================
-// // Return the number of entries log 2 marking a contiguous output range
+impl AddressDescriptor {
+    pub const UNKNOWN: Self = unsafe { MaybeUninit::zeroed().assume_init_read() };
+}
 
-// integer ContiguousSize(bit d128, TGx tgx, integer level)
-//    if d128 == '1' then
-//        case tgx of
-//            when TGx_4KB
-//                assert level IN {1, 2, 3};
-//                return if level == 1 then 2 else 4;
-//            when TGx_16KB
-//                assert level IN {1, 2, 3};
-//                if level == 1 then
-//                    return 2;
-//                elsif level == 2 then
-//                    return 4;
-//                else
-//                    return 6;
-//            when TGx_64KB
-//                assert level IN {2, 3};
-//                return if level == 2 then 6 else 4;
-//    else
-//        case tgx of
-//            when TGx_4KB
-//                assert level IN {1, 2, 3};
-//                return 4;
-//            when TGx_16KB
-//                assert level IN {2, 3};
-//                return if level == 2 then 5 else 7;
-//            when TGx_64KB
-//                assert level IN {2, 3};
-//                return 5;
+/// Library pseudocode for shared/translation/vmsa/ContiguousSize
+/// ContiguousSize()
+/// ================
+/// Return the number of entries log 2 marking a contiguous output range
+pub fn ContiguousSize(d128: u64, tgx: TGx, level: u64) -> u64 {
+    if d128 == 1 {
+        match tgx {
+            TGx::TGx_4KB => {
+                //assert level IN {1, 2, 3};
+                return if level == 1 { 2 } else { 4 };
+            }
+            TGx::TGx_16KB => {
+                //assert level IN {1, 2, 3};
+                if level == 1 {
+                    return 2;
+                } else if level == 2 {
+                    return 4;
+                } else {
+                    return 6;
+                }
+            }
+            TGx::TGx_64KB => {
+                //assert level IN {2, 3};
+                return if level == 2 { 6 } else { 4 };
+            }
+        }
+    } else {
+        match tgx {
+            TGx::TGx_4KB => {
+                //assert level IN {1, 2, 3};
+                return 4;
+            }
+            TGx::TGx_16KB => {
+                //assert level IN {2, 3};
+                return if level == 2 { 5 } else { 7 };
+            }
+            TGx::TGx_64KB => {
+                //assert level IN {2, 3};
+                return 5;
+            }
+        }
+    }
+}
 
-// Library pseudocode for shared/translation/vmsa/CreateAddressDescriptor
-
-// // CreateAddressDescriptor()
-// // =========================
-// // Set internal members for address descriptor type to valid values
-
-// AddressDescriptor CreateAddressDescriptor(bits(64) va, FullAddress pa,
-//                                          MemoryAttributes memattrs)
-//    AddressDescriptor addrdesc;
-
-//    addrdesc.paddress = pa;
-//    addrdesc.vaddress = va;
-//    addrdesc.memattrs = memattrs;
-//    addrdesc.fault    = NoFault();
-//    addrdesc.s1assured = FALSE;
-
-//    return addrdesc;
+/// Library pseudocode for shared/translation/vmsa/CreateAddressDescriptor
+/// CreateAddressDescriptor()
+/// =========================
+/// Set internal members for address descriptor type to valid values
+pub fn CreateAddressDescriptor(
+    va: u64,
+    pa: FullAddress,
+    memattrs: MemoryAttributes,
+) -> AddressDescriptor {
+    AddressDescriptor {
+        paddress: pa,
+        vaddress: va,
+        memattrs,
+        fault: FaultRecord::NoFault(),
+        s1assured: false,
+        s2fs1mro: false,
+        mecid: 0,
+    }
+}
 
 /// Library pseudocode for shared/translation/vmsa/CreateFaultyAddressDescriptor
 
@@ -79,7 +103,7 @@ use crate::shared_translation::*;
 /// ===============================
 /// Set internal members for address descriptor type with values indicating error
 
-pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDescriptor {
+pub fn CreateFaultyAddressDescriptor(_va: u64, _fault: FaultRecord) -> AddressDescriptor {
     todo!()
     // AddressDescriptor CreateFaultyAddressDescriptor(bits(64) va, FaultRecord fault)
     //    AddressDescriptor addrdesc;
@@ -200,13 +224,6 @@ pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDesc
 //        when Regime_EL2  return ELUsingAArch32(EL2);
 //        when Regime_EL3  return FALSE;
 
-// Library pseudocode for shared/translation/vmsa/S1TTWParams
-
-// // S1TTWParams
-// // ===========
-// // Register fields corresponding to stage 1 translation
-// // For A32-VMSA, if noted, they correspond to A32-LPAE (Long descriptor format)
-
 // type S1TTWParams is (
 // // A64-VMSA exclusive parameters
 //    bit         ha,         // TCR_ELx.HA
@@ -255,6 +272,122 @@ pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDesc
 //    bit         sif,        // SCR_EL3.SIF      / SCR.SIF
 //    MAIRType    mair        // MAIR_ELx         / MAIR1:MAIR0 or HMAIR1:HMAIR0
 // )
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct S1TTWParams {
+    pub bitfield: S1TTWParamsBits,
+    /// MAIR2_ELx
+    pub mair2: u64,
+    /// PIR_ELx
+    pub pir: u64,
+    /// PIRE0_EL1 or PIRE0_EL2 when HCR_EL2.E2H == '1'
+    pub pire0: u64,
+    /// TCR_ELx.TGx      / Always TGx_4KB
+    pub tgx: TGx,
+    /// MAIR_ELx         / MAIR1:MAIR0 or HMAIR1:HMAIR0
+    pub mair: u64, /*MAIRType*/
+}
+
+macro_rules! getter {
+    ($($getter:tt $ident:tt),*$(,)*) => {
+        $(pub fn $getter(&self) -> u64 {
+            self.bitfield.get(S1TTWParamsBits::$ident)
+        })*
+    };
+}
+impl S1TTWParams {
+    getter! {
+        get_ha ha,
+        get_hd hd,
+        get_tbi tbi,
+        get_tbid tbid,
+        get_nfd nfd,
+        get_e0pd e0pd,
+        get_d128 d128,
+        get_aie aie,
+        get_ds ds,
+        get_ps ps,
+        get_txsz txsz,
+        get_epan epan,
+        get_dct dct,
+        get_nv1 nv1,
+        get_cmow cmow,
+        get_pnch pnch,
+        get_disch disch,
+        get_haft haft,
+        get_mtx mtx,
+        get_skl skl,
+        get_pie pie,
+        get_emec emec,
+        get_amec amec,
+        get_fng fng,
+        get_irgn irgn,
+        get_orgn orgn,
+        get_sh sh,
+        get_hpd hpd,
+        get_ee ee,
+        get_wxn wxn,
+        get_ntlsmd ntlsmd,
+        get_dc dc,
+        get_sif sif,
+
+    }
+
+    pub const fn get_tgx(&self) -> TGx {
+        TGx::TGx_4KB
+    }
+}
+
+mycelium_bitfield::bitfield! {
+    /// Library pseudocode for shared/translation/vmsa/S1TTWParams
+    /// S1TTWParams
+    /// ===========
+    /// Register fields corresponding to stage 1 translation
+    /// For A32-VMSA, if noted, they correspond to A32-LPAE (Long descriptor format)
+    #[derive(Eq, PartialEq)]
+    pub struct S1TTWParamsBits<u64> {
+        // A64-VMSA exclusive parameters
+        pub const ha = 1;         // TCR_ELx.HA
+        pub const hd = 1;         // TCR_ELx.HD
+        pub const tbi = 1;        // TCR_ELx.TBI{x}
+        pub const tbid = 1;       // TCR_ELx.TBID{x}
+        pub const nfd = 1;        // TCR_EL1.NFDx or TCR_EL2.NFDx when HCR_EL2.E2H == '1'
+        pub const e0pd = 1;       // TCR_EL1.E0PDx or TCR_EL2.E0PDx when HCR_EL2.E2H == '1'
+        pub const d128 = 1;       // TCR_ELx.D128
+        pub const aie = 1;         // (TCR2_ELx/TCR_EL3).AIE
+        pub const ds = 1;         // TCR_ELx.DS
+        pub const ps = 3;         // TCR_ELx.{I}PS
+        pub const txsz = 6;       // TCR_ELx.TxSZ
+        pub const epan = 1;       // SCTLR_EL1.EPAN or SCTLR_EL2.EPAN when HCR_EL2.E2H == '1'
+        pub const dct = 1;        // HCR_EL2.DCT
+        pub const nv1 = 1;        // HCR_EL2.NV1
+        pub const cmow = 1;       // SCTLR_EL1.CMOW or SCTLR_EL2.CMOW when HCR_EL2.E2H == '1'
+        pub const pnch = 1;       // TCR{2}_ELx.PnCH
+        pub const disch = 1;      // TCR{2}_ELx.DisCH
+        pub const haft = 1;       // TCR{2}_ELx.HAFT
+        pub const mtx = 1;        // TCR_ELx.MTX{y}
+        pub const skl = 2;        // TCR_ELx.SKL
+        pub const pie = 1;        // TCR2_ELx.PIE or TCR_EL3.PIE
+        pub const emec = 1;       // SCTLR2_EL2.EMEC or SCTLR2_EL3.EMEC
+        pub const amec = 1;       // TCR2_EL2.AMEC0 or TCR2_EL2.AMEC1 when HCR_EL2.E2H == '1'
+        pub const fng = 1;        // TCR2_EL1.FNGx or TCR2_EL2.FNGx when HCR_EL2.E2H == '1'
+
+    // // A32-VMSA exclusive parameters
+    //    bits(3)     t0sz,       // TTBCR.T0SZ
+    //    bits(3)     t1sz,       // TTBCR.T1SZ
+    //    bit         uwxn,       // SCTLR.UWXN
+
+    // // Parameters common to both A64-VMSA & A32-VMSA (A64/A32)
+    pub const     irgn = 2;       // TCR_ELx.IRGNx    / TTBCR.IRGNx or HTCR.IRGN0
+    pub const orgn = 2;       // TCR_ELx.ORGNx    / TTBCR.ORGNx or HTCR.ORGN0
+    pub const sh=2;         // TCR_ELx.SHx      / TTBCR.SHx or HTCR.SH0
+    pub const         hpd=1;        // TCR_ELx.HPD{x}   / TTBCR2.HPDx or HTCR.HPD
+    pub const         ee=1;         // SCTLR_ELx.EE     / SCTLR.EE or HSCTLR.EE
+    pub const         wxn=1;        // SCTLR_ELx.WXN    / SCTLR.WXN or HSCTLR.WXN
+    pub const         ntlsmd=1;     // SCTLR_ELx.nTLSMD / SCTLR.nTLSMD or HSCTLR.nTLSMD
+    pub const         dc=1;         // HCR_EL2.DC       / HCR.DC
+    pub const         sif=1;        // SCR_EL3.SIF      / SCR.SIF
+    }
+}
 
 // Library pseudocode for shared/translation/vmsa/S2TTWParams
 
@@ -302,20 +435,21 @@ pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDesc
 //    bit         vm          // HCR_EL2.VM       / HCR.VM
 // )
 
-// Library pseudocode for shared/translation/vmsa/SDFType
+/// Library pseudocode for shared/translation/vmsa/SDFType
 
-// // SDFType
-// // =======
-// // Short-descriptor format type
+/// SDFType
+/// =======
+/// Short-descriptor format type
 
-// enumeration SDFType {
-//    SDFType_Table,
-//    SDFType_Invalid,
-//    SDFType_Supersection,
-//    SDFType_Section,
-//    SDFType_LargePage,
-//    SDFType_SmallPage
-// };
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum SDFType {
+    SDFType_Table,
+    SDFType_Invalid,
+    SDFType_Supersection,
+    SDFType_Section,
+    SDFType_LargePage,
+    SDFType_SmallPage,
+}
 
 // Library pseudocode for shared/translation/vmsa/SecurityStateForRegime
 
@@ -331,53 +465,53 @@ pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDesc
 //        when Regime_EL20    return SecurityStateAtEL(EL2);
 //        when Regime_EL10    return SecurityStateAtEL(EL1);
 
-// Library pseudocode for shared/translation/vmsa/StageOA
+/// Library pseudocode for shared/translation/vmsa/StageOA
+/// StageOA()
+/// =========
+/// Given the final walk state (a page or block descriptor), map the untranslated
+/// input address bits to the output address
+pub fn StageOA(_ia: u64, d128: u64, tgx: TGx, walkstate: TTWState) -> FullAddress {
+    // Output Address
+    let mut oa: FullAddress = unsafe { MaybeUninit::zeroed().assume_init_read() };
+    let csize: u64;
 
-// // StageOA()
-// // =========
-// // Given the final walk state (a page or block descriptor), map the untranslated
-// // input address bits to the output address
+    let tsize = TranslationSize(d128, tgx, walkstate.level);
+    csize = if walkstate.contiguous {
+        ContiguousSize(d128, tgx, walkstate.level)
+    } else {
+        0
+    };
 
-// FullAddress StageOA(bits(64) ia, bit d128, TGx tgx, TTWState walkstate)
-//    // Output Address
-//    FullAddress oa;
-//    integer csize;
+    let _ia_msb = tsize + csize;
+    oa.paspace = walkstate.baseaddress.paspace;
+    //oa.address = walkstate.baseaddress.address<55:ia_msb>:ia<ia_msb-1:0>;
 
-//    tsize = TranslationSize(d128, tgx, walkstate.level);
-//    if walkstate.contiguous == '1' then
-//        csize = ContiguousSize(d128, tgx, walkstate.level);
-//    else
-//        csize = 0;
+    oa
+}
 
-//    constant integer ia_msb = tsize + csize;
-//    oa.paspace = walkstate.baseaddress.paspace;
-//    oa.address = walkstate.baseaddress.address<55:ia_msb>:ia<ia_msb-1:0>;
+/// Library pseudocode for shared/translation/vmsa/TGx
+/// // TGx
+/// // ===
+/// // Translation granules sizes
+#[derive(Default, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum TGx {
+    #[default]
+    TGx_4KB,
+    TGx_16KB,
+    TGx_64KB,
+}
 
-//    return oa;
-
-// Library pseudocode for shared/translation/vmsa/TGx
-
-// // TGx
-// // ===
-// // Translation granules sizes
-
-// enumeration TGx {
-//    TGx_4KB,
-//    TGx_16KB,
-//    TGx_64KB
-// };
-
-// Library pseudocode for shared/translation/vmsa/TGxGranuleBits
-
-// // TGxGranuleBits()
-// // ================
-// // Retrieve the address size, in bits, of a granule
-
-// integer TGxGranuleBits(TGx tgx)
-//    case tgx of
-//        when TGx_4KB  return 12;
-//        when TGx_16KB return 14;
-//        when TGx_64KB return 16;
+/// Library pseudocode for shared/translation/vmsa/TGxGranuleBits
+/// TGxGranuleBits()
+/// ================
+/// Retrieve the address size, in bits, of a granule
+pub fn TGxGranuleBits(tgx: TGx) -> u64 {
+    match tgx {
+        TGx::TGx_4KB => 12,
+        TGx::TGx_16KB => 14,
+        TGx::TGx_64KB => 16,
+    }
+}
 
 // Library pseudocode for shared/translation/vmsa/TLBContext
 
@@ -418,28 +552,36 @@ pub fn CreateFaultyAddressDescriptor(va: u64, fault: FaultRecord) -> AddressDesc
 //    bits(128)   s2descriptor  // Stage 2 leaf descriptor in memory (valid if the TLB caches stage 2)
 // )
 
-// Library pseudocode for shared/translation/vmsa/TTWState
+/// Library pseudocode for shared/translation/vmsa/TTWState
 
-// // TTWState
-// // ========
-// // Translation table walk state
+/// TTWState
+/// ========
+/// Translation table walk state
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct TTWState {
+    pub istable: bool,
+    pub level: u64,
+    pub baseaddress: FullAddress,
+    /// bit
+    pub contiguous: bool,
+    /// Stage 1 Assured Translation Property
+    pub s1assured: bool,
+    /// Stage 2 AssuredOnly attribute bit
+    pub s2assuredonly: bool,
+    /// Stage 1 Disable Contiguous Hint bit
+    pub disch: bool,
+    /// bit
+    pub nG: bool,
+    /// bit
+    pub guardedpage: bool,
+    /// AArch32 Short-descriptor format walk only
+    pub sdftype: SDFType,
+    /// AArch32 Short-descriptor format walk only bits(4)
+    pub domain: u8,
+    pub memattrs: MemoryAttributes,
+    pub permissions: Permissions,
+}
 
-// type TTWState is (
-//    boolean             istable,
-//    integer             level,
-//    FullAddress         baseaddress,
-//    bit                 contiguous,
-//    boolean             s1assured,      // Stage 1 Assured Translation Property
-//    bit                 s2assuredonly,  // Stage 2 AssuredOnly attribute
-//    bit                 disch,          // Stage 1 Disable Contiguous Hint
-//    bit                 nG,
-//    bit                 guardedpage,
-//    SDFType             sdftype,    // AArch32 Short-descriptor format walk only
-//    bits(4)             domain,     // AArch32 Short-descriptor format walk only
-//    MemoryAttributes    memattrs,
-//    Permissions         permissions
-// )
-//
 /// Library pseudocode for shared/functions/system/EL0
 
 pub const EL3: PrivilegeLevel = PrivilegeLevel::PL3;
@@ -463,7 +605,7 @@ pub enum PrivilegeLevel {
 /// ===================
 /// Select the translation regime given the target EL and PE state
 
-pub fn TranslationRegime(el: PrivilegeLevel) -> Regime {
+pub fn TranslationRegime(_el: PrivilegeLevel) -> Regime {
     todo!()
     // match el {
     //     self::EL3 if ELUsingAArch32(EL3) => Regime::Regime_EL30,
@@ -479,19 +621,18 @@ pub fn TranslationRegime(el: PrivilegeLevel) -> Regime {
     // }
 }
 
-// Library pseudocode for shared/translation/vmsa/TranslationSize
+/// Library pseudocode for shared/translation/vmsa/TranslationSize
+/// TranslationSize()
+/// =================
+/// Compute the number of bits directly mapped from the input address
+/// to the output address
+pub fn TranslationSize(d128: u64, tgx: TGx, level: u64) -> u64 {
+    let granulebits = TGxGranuleBits(tgx);
+    let descsizelog2 = if d128 == 1 { 4 } else { 3 };
+    let blockbits = (FINAL_LEVEL - level) * (granulebits - descsizelog2);
 
-// // TranslationSize()
-// // =================
-// // Compute the number of bits directly mapped from the input address
-// // to the output address
-
-// integer TranslationSize(bit d128, TGx tgx, integer level)
-//    granulebits = TGxGranuleBits(tgx);
-//    descsizelog2 = if d128 == '1' then 4 else 3;
-//    blockbits   = (FINAL_LEVEL - level) * (granulebits - descsizelog2);
-
-//    return granulebits + blockbits;
+    granulebits + blockbits
+}
 
 // Library pseudocode for shared/translation/vmsa/UseASID
 
@@ -510,3 +651,20 @@ pub fn TranslationRegime(el: PrivilegeLevel) -> Regime {
 
 // boolean UseVMID(TLBContext accesscontext)
 //    return accesscontext.regime == Regime_EL10 && EL2Enabled();
+
+mod walkparams {
+    use super::*;
+
+    /// AArch64.GetVARange()
+    /// ====================
+    /// Determines if the VA that is to be translated lies in LOWER or UPPER address range.
+    pub fn AArch64GetVARange(va: u64) -> VARange {
+        //if va<55> == '0' {
+        if (va & (1 << 55)) == 0 {
+            return VARange::VARange_LOWER;
+        }
+        VARange::VARange_UPPER
+    }
+}
+
+pub use walkparams::*;

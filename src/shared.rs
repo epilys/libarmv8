@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
 use crate::shared_vmsa::*;
+use crate::stubs::*;
+
 pub static PSTATE: ProcState = ProcState::new();
 
 // /// Library pseudocode for shared/functions/system/PhysicalCountInt
@@ -98,6 +100,52 @@ pub enum SecurityState {
     SS_Secure,
 }
 
+/// Library pseudocode for shared/functions/system/SecurityStateAtEL
+/// SecurityStateAtEL()
+/// ===================
+/// Returns the effective security state at the exception level based off current settings.
+pub fn SecurityStateAtEL(el: PrivilegeLevel) -> SecurityState {
+    if IsFeatureImplemented("FEAT_RME") {
+        if el == EL3 {
+            return SecurityState::SS_Root;
+        }
+        let effective_nse_ns = 0; //todo!(); //SCR_EL3.NSE : EffectiveSCR_EL3_NS();
+        match effective_nse_ns {
+            0 if IsFeatureImplemented("FEAT_SEL2") => return SecurityState::SS_Secure,
+            0 => unreachable!(),
+            1 => return SecurityState::SS_NonSecure,
+            3 => return SecurityState::SS_Realm,
+            _ => unreachable!(),
+        }
+    }
+
+    if !HaveEL(EL3) {
+        if SecureOnlyImplementation() {
+            return SecurityState::SS_Secure;
+        } else {
+            return SecurityState::SS_NonSecure;
+        }
+    } else if el == EL3 {
+        return SecurityState::SS_Secure;
+    } else {
+        // For EL2 call only when EL2 is enabled in current security state
+        assert!(el != EL2 || EL2Enabled());
+        if !ELUsingAArch32(EL3) {
+            return if SCR_EL3.get(SCR_EL3_REG::NS) == 1 {
+                SecurityState::SS_NonSecure
+            } else {
+                SecurityState::SS_Secure
+            };
+        } else {
+            return if SCR.get(SCR_REG::NS) == 1 {
+                SecurityState::SS_NonSecure
+            } else {
+                SecurityState::SS_Secure
+            };
+        }
+    }
+}
+
 /// Library pseudocode for shared/functions/system/EL2Enabled
 /// EL2Enabled()
 /// ============
@@ -115,7 +163,7 @@ pub fn EL2Enabled() -> bool {
 /// HaveEL()
 /// ========
 /// Return TRUE if Exception level 'el' is supported
-pub fn HaveEL(el: PrivilegeLevel) -> bool {
+pub fn HaveEL(_el: PrivilegeLevel) -> bool {
     todo!()
 
     // case el of

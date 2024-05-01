@@ -10,19 +10,7 @@ pub enum ATAccess {
     ATAccess_WritePAN,
 }
 
-/// Library pseudocode for shared/translation/vmsa/AddressDescriptor
-
-pub struct AddressDescriptor {
-    /// fault.statuscode indicates whether the address is valid
-    fault: FaultRecord,
-    memattrs: MemoryAttributes,
-    paddress: FullAddress,
-    /// bits(64)
-    vaddress: u64,
-}
-
 /// Library pseudocode for shared/translation/vmsa/Regime
-
 /// Regime
 /// ======
 /// Translation regimes

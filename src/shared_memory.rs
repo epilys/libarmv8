@@ -2,7 +2,7 @@
 #![allow(non_camel_case_types)]
 
 use crate::shared::*;
-use crate::shared_mpam::MPAMinfo;
+use crate::shared_mpam::{GenMPAMCurEL, MPAMinfo};
 use crate::shared_vmsa::*;
 
 /// Library pseudocode for shared/functions/memory/Fault
@@ -33,11 +33,12 @@ pub enum Fault {
 
 /// Library pseudocode for shared/functions/memory/FaultRecord
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct FaultRecord {
     // Fault Status
     pub statuscode: Fault,
     // Type of access that faulted
-    pub acctype: AccType,
+    pub acctype: AccessType,
     // Intermediate physical address
     pub ipaddress: FullAddress,
     // Is on a Stage 1 translation table walk
@@ -86,7 +87,7 @@ impl FaultRecord {
     /// =========
     /// Return a clear fault record indicating no faults have occured for a specific access
 
-    pub fn NoFaultForAccess(accdesc: AccessDescriptor) -> Self {
+    pub fn NoFaultForAccess(_accdesc: AccessDescriptor) -> Self {
         // FaultRecord NoFault(AccessDescriptor accdesc)
         //     FaultRecord fault;
 
@@ -110,63 +111,41 @@ impl FaultRecord {
     }
 }
 
-/// Library pseudocode for shared/functions/memory/AccType
-
+/// Library pseudocode for shared/functions/memory/AccessType
+/// AccessType
+/// ==========
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum AccType {
-    /// Normal loads and stores
-    AccType_NORMAL,
-    /// Streaming loads and stores
-    AccType_STREAM,
-    /// Vector loads and stores
-    AccType_VEC,
-    /// Streaming vector loads and stores
-    AccType_VECSTREAM,
-    /// Scalable vector loads and stores
-    AccType_SVE,
-    /// Scalable vector streaming loads and stores
-    AccType_SVESTREAM,
-    /// Streaming unprivileged loads and stores
-    AccType_UNPRIVSTREAM,
-    /// Load and store multiple
-    AccType_A32LSMD,
-    /// Atomic loads and stores
-    AccType_ATOMIC,
-    AccType_ATOMICRW,
-    /// Load-Acquire and Store-Release
-    AccType_ORDERED,
-    AccType_ORDEREDRW,
-    /// Load-Acquire and Store-Release with atomic access
-    AccType_ORDEREDATOMIC,
-    AccType_ORDEREDATOMICRW,
-    /// Atomic 64-byte loads and stores
-    AccType_ATOMICLS64,
-    /// Load-LOAcquire and Store-LORelease
-    AccType_LIMITEDORDERED,
-    /// Load and store unprivileged
-    AccType_UNPRIV,
-    /// Instruction fetch
-    AccType_IFETCH,
-    /// Translation table walk
-    AccType_TTW,
-    /// Non-faulting loads
-    AccType_NONFAULT,
-    /// Contiguous FF load, not first element
-    AccType_CNOTFIRST,
-    /// MRS/MSR instruction used at EL1 and which is converted to a memory access that uses the
-    /// EL2 translation regime
-    AccType_NV2REGISTER,
-    // Other operations
-    /// Data cache maintenance
-    AccType_DC,
-    /// Instruction cache maintenance
-    AccType_IC,
-    /// DC ZVA instructions
-    AccType_DCZVA,
-    /// Address translation with PAN permission checks
-    AccType_ATPAN,
-    /// Address translation
-    AccType_AT,
+pub enum AccessType {
+    /// Instruction FETCH
+    AccessType_IFETCH,
+    /// Software load/store to a General Purpose Register
+    AccessType_GPR,
+    /// Software ASIMD extension load/store instructions
+    AccessType_ASIMD,
+    /// Software SVE load/store instructions
+    AccessType_SVE,
+    /// Software SME load/store instructions
+    AccessType_SME,
+    /// Sysop IC
+    AccessType_IC,
+    /// Sysop DC (not DC {Z,G,GZ}VA)
+    AccessType_DC,
+    /// Sysop DC {Z,G,GZ}VA
+    AccessType_DCZero,
+    /// Sysop AT
+    AccessType_AT,
+    /// NV2 memory redirected access
+    AccessType_NV2,
+    /// Statistical Profiling buffer access
+    AccessType_SPE,
+    /// Guarded Control Stack access
+    AccessType_GCS,
+    /// Trace Buffer access
+    AccessType_TRBE,
+    /// Granule Protection Table Walk
+    AccessType_GPTW,
+    /// Translation Table Walk
+    AccessType_TTW,
 }
 
 /// Library pseudocode for shared/functions/memory/AccessDescriptor
@@ -176,7 +155,7 @@ pub enum AccType {
 /// Memory access or translation invocation details that steer architectural behavior
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct AccessDescriptor {
-    pub acctype: AccType,
+    pub acctype: AccessType,
     /// Acting EL for the access bits(2}
     pub el: PrivilegeLevel,
     /// Acting Security State for the access
@@ -249,20 +228,22 @@ pub struct AccessDescriptor {
     pub mpam: MPAMinfo,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct FullAddress {
-    paspace: PASpace,
+    pub paspace: PASpace,
     /// bits(52}
-    address: u64,
+    pub address: u64,
 }
 
 /// Library pseudocode for shared/functions/memory/MemAttrHints
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MemAttrHints {
     /// bits(2}
-    attrs: u8, // See MemAttr_*, Cacheability attributes
+    pub attrs: MemAttr, // See MemAttr_*, Cacheability attributes
     /// bits(2}
-    hints: u8, // See MemHint_*, Allocation hints
-    transient: bool,
+    pub hints: MemHint, // See MemHint_*, Allocation hints
+    pub transient: bool,
 }
 
 /// Library pseudocode for shared/functions/memory/MemType
@@ -273,39 +254,32 @@ pub enum MemType {
     MemType_Device,
 }
 
-/// Library pseudocode for shared/functions/memory/PASpace
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum PASpace {
-    PAS_NonSecure,
-    PAS_Secure,
-}
-
 /// Library pseudocode for shared/functions/memory/Permissions
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Permissions {
     /// Stage 1 hierarchical access permissions bits(2}
-    ap_table: u8,
+    pub ap_table: u8,
     /// Stage 1 hierarchical execute-never for single EL regimes bit
-    xn_table: u8,
+    pub xn_table: u8,
     /// Stage 1 hierarchical privileged execute-never bit
-    pxn_table: u8,
+    pub pxn_table: u8,
     /// Stage 1 hierarchical unprivileged execute-never bit
-    uxn_table: u8,
+    pub uxn_table: u8,
     /// Stage 1 access permissions bits(3}
-    ap: u8,
+    pub ap: u8,
     /// Stage 1 execute-never for single EL regimes bit
-    xn: u8,
+    pub xn: u8,
     /// Stage 1 unprivileged execute-never bit
-    uxn: u8,
+    pub uxn: u8,
     /// Stage 1 privileged execute-never bit
-    pxn: u8,
+    pub pxn: u8,
     /// Stage 2 access permissions bits(2}
-    s2ap: u8,
+    pub s2ap: u8,
     /// Stage 2 extended execute-never bit
-    s2xnx: u8,
+    pub s2xnx: u8,
     /// Stage 2 execute-never bit
-    s2xn: u8,
+    pub s2xn: u8,
 }
 
 // Library pseudocode for shared/functions/memory/PhysMemRead
@@ -319,17 +293,18 @@ pub struct Permissions {
 
 /// Library pseudocode for shared/functions/memory/PhysMemRetStatus
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PhysMemRetStatus {
     /// Fault Status
-    statuscode: Fault,
+    pub statuscode: Fault,
     /// IMPLEMENTATION DEFINED syndrome for External aborts bit
-    extflag: u8,
+    pub extflag: u8,
     /// optional error state returned on a physical memory access bits(2}
-    errortype: u8,
+    pub errortype: u8,
     /// status of 64B store bits(64}
-    store64bstatus: u64,
+    pub store64bstatus: u64,
     /// Type of access that faulted
-    acctype: AccType,
+    pub acctype: AccessType,
 }
 
 // Library pseudocode for shared/functions/memory/PhysMemWrite
@@ -357,22 +332,39 @@ pub enum Shareability {
     Shareability_OSH,
 }
 
+/// Library pseudocode for shared/translation/attrs/EffectiveShareability
+/// EffectiveShareability()
+/// =======================
+/// Force Outer Shareability on Device and Normal iNCoNC memory
+pub fn EffectiveShareability(memattrs: MemoryAttributes) -> Shareability {
+    if memattrs.memtype == MemType::MemType_Device
+        || (memattrs.inner.attrs == MemAttr::MemAttr_NC
+            && memattrs.outer.attrs == MemAttr::MemAttr_NC)
+    {
+        return Shareability::Shareability_OSH;
+    }
+
+    memattrs.shareability
+}
+
 /// Library pseudocode for shared/functions/memory/VARange
 
 /// VARange
 /// =======
 /// Virtual address ranges
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum VARange {
+    #[default]
     VARange_LOWER,
     VARange_UPPER,
 }
 
 /// Library pseudocode for shared/functions/memory/DeviceType
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum DeviceType {
+    #[default]
     DeviceType_GRE,
     DeviceType_nGRE,
     DeviceType_nGnRE,
@@ -384,8 +376,9 @@ pub enum DeviceType {
 /// MemAtomicOp
 /// ===========
 /// Atomic data processing instruction types.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MemAtomicOp {
+    #[default]
     MemAtomicOp_GCSSS1,
     MemAtomicOp_ADD,
     MemAtomicOp_BIC,
@@ -399,15 +392,17 @@ pub enum MemAtomicOp {
     MemAtomicOp_CAS,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CacheOp {
+    #[default]
     CacheOp_Clean,
     CacheOp_Invalidate,
     CacheOp_CleanInvalidate,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CacheOpScope {
+    #[default]
     CacheOpScope_SetWay,
     CacheOpScope_PoU,
     CacheOpScope_PoC,
@@ -419,8 +414,9 @@ pub enum CacheOpScope {
     CacheOpScope_ALLUIS,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CacheType {
+    #[default]
     CacheType_Data,
     CacheType_Tag,
     CacheType_Data_Tag,
@@ -443,9 +439,9 @@ pub enum CachePASpace {
 
 /// Library pseudocode for shared/functions/memory/MemOp
 
-// MemOp
-// =====
-// Memory access instruction types.
+/// MemOp
+/// =====
+/// Memory access instruction types.
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MemOp {
@@ -456,8 +452,8 @@ pub enum MemOp {
 
 /// Library pseudocode for shared/functions/memory/Memory
 
-// Memory Tag type
-// ===============
+/// Memory Tag type
+/// ===============
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MemTagType {
@@ -467,25 +463,147 @@ pub enum MemTagType {
 }
 
 /// Library pseudocode for shared/functions/memory/MemoryAttributes
-
-// MemoryAttributes
-// ================
-// Memory attributes descriptor
-
+/// MemoryAttributes
+/// ================
+/// Memory attributes descriptor
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MemoryAttributes {
-    memtype: MemType,
+    pub memtype: MemType,
     // For Device memory types
-    device: DeviceType,
+    pub device: DeviceType,
     // Inner hints and attributes
-    inner: MemAttrHints,
+    pub inner: MemAttrHints,
     // Outer hints and attributes
-    outer: MemAttrHints,
+    pub outer: MemAttrHints,
     // Shareability attribute
-    shareability: Shareability,
+    pub shareability: Shareability,
     // MTE tag type for this memory.
-    tags: MemTagType,
+    pub tags: MemTagType,
     // Allocation Tag access permission
-    notagaccess: bool,
+    pub notagaccess: bool,
     // XS attribute bit
-    xs: bool,
+    pub xs: bool,
+}
+
+/// Library pseudocode for shared/functions/memory/Cacheability
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MemAttr {
+    #[default]
+    // Non-cacheable
+    MemAttr_NC = 0b00,
+    // Write-through
+    MemAttr_WT = 0b10,
+    // Write-back
+    MemAttr_WB = 0b11,
+}
+
+/// Library pseudocode for shared/functions/memory/Allocation
+/// bits(2)
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+pub enum MemHint {
+    #[default]
+    /// No Read-Allocate, No Write-Allocate
+    MemHint_No = 0b00,
+    /// No Read-Allocate, Write-Allocate
+    MemHint_WA = 0b01,
+    /// Read-Allocate, No Write-Allocate
+    MemHint_RA = 0b10,
+    /// Read-Allocate, Write-Allocate
+    MemHint_RWA = 0b11,
+}
+
+/// Library pseudocode for shared/functions/memory/NewAccDesc
+/// NewAccDesc()
+/// ============
+/// Create a new AccessDescriptor with initialised fields
+pub fn NewAccDesc(acctype: AccessType) -> AccessDescriptor {
+    let accdesc: AccessDescriptor = AccessDescriptor {
+        acctype,
+        el: PSTATE.get_EL(),
+        ss: SecurityStateAtEL(PSTATE.get_EL()),
+        acqsc: false,
+        acqpc: false,
+        relsc: false,
+        limitedordered: false,
+        exclusive: false,
+        rcw: false,
+        rcws: false,
+        atomicop: false,
+        nontemporal: false,
+        read: false,
+        write: false,
+        pan: false,
+        nonfault: false,
+        firstfault: false,
+        first: false,
+        contiguous: false,
+        streamingsve: false,
+        ls64: false,
+        mops: false,
+        a32lsmd: false,
+        tagchecked: false,
+        tagaccess: false,
+        devstoreunpred: false,
+        transactional: false,
+        mpam: GenMPAMCurEL(acctype),
+        ispair: false,
+        highestaddressfirst: false,
+        cacheop: CacheOp::default(),
+        cachetype: CacheType::default(),
+        modop: MemAtomicOp::default(),
+        opscope: CacheOpScope::default(),
+        toplevel: false,
+        varange: VARange::default(),
+    };
+    accdesc
+}
+
+/// Library pseudocode for shared/functions/memory/PASpace
+/// PASpace
+/// =======
+/// Physical address spaces
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PASpace {
+    PAS_NonSecure,
+    PAS_Secure,
+    PAS_Root,
+    PAS_Realm,
+}
+
+/// Library pseudocode for shared/functions/memory/CreateAccDescTTEUpdate
+/// CreateAccDescTTEUpdate()
+/// ========================
+/// Access descriptor for translation table entry HW update
+pub fn CreateAccDescTTEUpdate(accdesc_in: AccessDescriptor) -> AccessDescriptor {
+    let mut accdesc: AccessDescriptor = NewAccDesc(AccessType::AccessType_TTW);
+    accdesc.el = accdesc_in.el;
+    accdesc.ss = accdesc_in.ss;
+    accdesc.atomicop = true;
+    accdesc.modop = MemAtomicOp::MemAtomicOp_CAS;
+    accdesc.read = true;
+    accdesc.write = true;
+    accdesc.mpam = accdesc_in.mpam;
+    accdesc
+}
+
+/// Library pseudocode for shared/translation/attrs/NormalNCMemAttr
+/// NormalNCMemAttr()
+/// =================
+/// Normal Non-cacheable memory attributes
+pub fn NormalNCMemAttr() -> MemoryAttributes {
+    let non_cacheable: MemAttrHints = MemAttrHints {
+        attrs: MemAttr::MemAttr_NC,
+        hints: Default::default(),
+        transient: Default::default(),
+    };
+    MemoryAttributes {
+        memtype: MemType::MemType_Normal,
+        device: DeviceType::default(),
+        outer: non_cacheable,
+        inner: non_cacheable,
+        shareability: Shareability::Shareability_OSH,
+        tags: MemTagType::MemTag_Untagged,
+        notagaccess: false,
+        xs: false,
+    }
 }

@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: EUPL-1.2 OR GPL-3.0-or-later
+//
+use crate::shared::*;
+use crate::shared_memory::*;
+use crate::shared_translation::*;
+use crate::shared_vmsa::*;
+use crate::stubs::*;
 
 // Library pseudocode for shared/functions/mpam/AltPARTIDSpace
 
@@ -114,9 +120,9 @@
 // // GenMPAM()
 // // =========
 // // Returns MPAMinfo for exception level el.
-// // If in_d is TRUE returns MPAM information using PARTID_I and PMG_I fields
+// // If in_d is true returns MPAM information using PARTID_I and PMG_I fields
 // // of MPAMel_ELx register and otherwise using PARTID_D and PMG_D fields.
-// // If in_sm is TRUE returns MPAM information using PARTID_D and PMG_D fields
+// // If in_sm is true returns MPAM information using PARTID_D and PMG_D fields
 // // of MPAMSM_EL1 register.
 // // Produces a PARTID in PARTID space pspace.
 
@@ -137,97 +143,104 @@
 //    returninfo.pmg     = groupel;
 //    return returninfo;
 
-// Library pseudocode for shared/functions/mpam/GenMPAMAtEL
+/// Library pseudocode for shared/functions/mpam/GenMPAMAtEL
+/// GenMPAMAtEL()
+/// =============
+/// Returns MPAMinfo for the specified EL.
+/// May be called if MPAM is not implemented (but in an version that supports
+/// MPAM), MPAM is disabled, or in AArch32.  In AArch32, convert the mode to
+/// EL if can and use that to drive MPAM information generation.  If mode
+/// cannot be converted, MPAM is not implemented, or MPAM is disabled return
+/// default MPAM information for the current security state.
+pub fn GenMPAMAtEL(_acctype: AccessType, _el: PrivilegeLevel) -> MPAMinfo {
+    unimplemented!()
+    // let mut mpamEL: PrivilegeLevel;
+    // let mut  validEL = false;
+    // let security: SecurityState = SecurityStateAtEL(el);
+    // let in_d = false;
+    // let in_sm = false;
+    // let pspace: PARTIDSpaceType = PARTIDSpaceFromSS(security);
+    // if pspace == PIDSpace_NonSecure && !MPAMIsEnabled() {
+    //     return DefaultMPAMInfo(pspace);
+    // }
+    // if UsingAArch32() {
+    //     (validEL, mpamEL) = ELFromM32(PSTATE.M);
+    // } else {
+    //     mpamEL = if acctype == AccessType_NV2 then EL2 else el;
+    //     validEL = true;
+    // case acctype of
+    //     when AccessType_IFETCH, AccessType_IC
+    //         in_d = true;
+    //     when AccessType_SME
+    //         in_sm = (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
+    //                  boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence");
+    //     when AccessType_ASIMD
+    //         in_sm = (IsFeatureImplemented(FEAT_SME) && PSTATE.SM == '1' &&
+    //                  (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
+    //                   boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence"));
+    //     when AccessType_SVE
+    //         in_sm = (IsFeatureImplemented(FEAT_SME) && PSTATE.SM == '1' &&
+    //                  (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
+    //                   boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence"));
+    //     otherwise
+    //         // Other access types are DATA accesses
+    //         in_d = false;
+    // }
+    // if !validEL {
+    //     return DefaultMPAMInfo(pspace);
+    // } else if IsFeatureImplemented(FEAT_RME) && MPAMIDR_EL1.HAS_ALTSP == 1 {
+    //     // Substitute alternative PARTID space if selected
+    //     pspace = AltPARTIDSpace(mpamEL, security, pspace);
+    // }
+    // if IsFeatureImplemented(FEAT_MPAMv0p1) && MPAMIDR_EL1.HAS_FORCE_NS == 1 {
+    //     if MPAM3_EL3.FORCE_NS == 1 && security == SS_Secure {
+    //         pspace = PIDSpace_NonSecure;
+    //     }
+    // }
+    // if ((IsFeatureImplemented(FEAT_MPAMv0p1) || IsFeatureImplemented(FEAT_MPAMv1p1)) &&
+    //       MPAMIDR_EL1.HAS_SDEFLT == 1) {
+    //     if MPAM3_EL3.SDEFLT == 1 && security == SS_Secure {
+    //         return DefaultMPAMInfo(pspace);
+    //     }
+    // }
+    // if !MPAMIsEnabled() {
+    //     return DefaultMPAMInfo(pspace);
+    // } else {
+    //     return GenMPAM(mpamEL, in_d, in_sm, pspace);
+    // }
+}
 
-// // GenMPAMAtEL()
-// // =============
-// // Returns MPAMinfo for the specified EL.
-// // May be called if MPAM is not implemented (but in an version that supports
-// // MPAM), MPAM is disabled, or in AArch32.  In AArch32, convert the mode to
-// // EL if can and use that to drive MPAM information generation.  If mode
-// // cannot be converted, MPAM is not implemented, or MPAM is disabled return
-// // default MPAM information for the current security state.
-
-// MPAMinfo GenMPAMAtEL(AccessType acctype, bits(2) el)
-//    bits(2) mpamEL;
-//    boolean validEL = FALSE;
-//    SecurityState security = SecurityStateAtEL(el);
-//    boolean in_d = FALSE;
-//    boolean in_sm = FALSE;
-//    PARTIDSpaceType pspace = PARTIDSpaceFromSS(security);
-//    if pspace == PIDSpace_NonSecure && !MPAMIsEnabled() then
-//        return DefaultMPAMInfo(pspace);
-//    if UsingAArch32() then
-//        (validEL, mpamEL) = ELFromM32(PSTATE.M);
-//    else
-//        mpamEL = if acctype == AccessType_NV2 then EL2 else el;
-//        validEL = TRUE;
-//    case acctype of
-//        when AccessType_IFETCH, AccessType_IC
-//            in_d = TRUE;
-//        when AccessType_SME
-//            in_sm = (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
-//                     boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence");
-//        when AccessType_ASIMD
-//            in_sm = (IsFeatureImplemented(FEAT_SME) && PSTATE.SM == '1' &&
-//                     (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
-//                      boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence"));
-//        when AccessType_SVE
-//            in_sm = (IsFeatureImplemented(FEAT_SME) && PSTATE.SM == '1' &&
-//                     (boolean IMPLEMENTATION_DEFINED "Shared SMCU" ||
-//                      boolean IMPLEMENTATION_DEFINED "MPAMSM_EL1 label precedence"));
-//        otherwise
-//            // Other access types are DATA accesses
-//            in_d = FALSE;
-//    if !validEL then
-//        return DefaultMPAMInfo(pspace);
-//    elsif IsFeatureImplemented(FEAT_RME) && MPAMIDR_EL1.HAS_ALTSP == '1' then
-//        // Substitute alternative PARTID space if selected
-//        pspace = AltPARTIDSpace(mpamEL, security, pspace);
-//    if IsFeatureImplemented(FEAT_MPAMv0p1) && MPAMIDR_EL1.HAS_FORCE_NS == '1' then
-//        if MPAM3_EL3.FORCE_NS == '1' && security == SS_Secure then
-//            pspace = PIDSpace_NonSecure;
-//    if ((IsFeatureImplemented(FEAT_MPAMv0p1) || IsFeatureImplemented(FEAT_MPAMv1p1)) &&
-//          MPAMIDR_EL1.HAS_SDEFLT == '1') then
-//        if MPAM3_EL3.SDEFLT == '1' && security == SS_Secure then
-//            return DefaultMPAMInfo(pspace);
-//    if !MPAMIsEnabled() then
-//        return DefaultMPAMInfo(pspace);
-//    else
-//        return GenMPAM(mpamEL, in_d, in_sm, pspace);
-
-// Library pseudocode for shared/functions/mpam/GenMPAMCurEL
-
-// // GenMPAMCurEL()
-// // ==============
-// // Returns MPAMinfo for the current EL and security state.
-// // May be called if MPAM is not implemented (but in an version that supports
-// // MPAM), MPAM is disabled, or in AArch32.  In AArch32, convert the mode to
-// // EL if can and use that to drive MPAM information generation.  If mode
-// // cannot be converted, MPAM is not implemented, or MPAM is disabled return
-// // default MPAM information for the current security state.
-
-// MPAMinfo GenMPAMCurEL(AccessType acctype)
-//    return GenMPAMAtEL(acctype, PSTATE.EL);
+/// Library pseudocode for shared/functions/mpam/GenMPAMCurEL
+/// GenMPAMCurEL()
+/// ==============
+/// Returns MPAMinfo for the current EL and security state.
+/// May be called if MPAM is not implemented (but in an version that supports
+/// MPAM), MPAM is disabled, or in AArch32.  In AArch32, convert the mode to
+/// EL if can and use that to drive MPAM information generation.  If mode
+/// cannot be converted, MPAM is not implemented, or MPAM is disabled return
+/// default MPAM information for the current security state.
+pub fn GenMPAMCurEL(acctype: AccessType) -> MPAMinfo {
+    GenMPAMAtEL(acctype, PSTATE.get_EL())
+}
 
 // Library pseudocode for shared/functions/mpam/GenPARTID
 
 // // GenPARTID()
 // // ===========
 // // Returns physical PARTID and error boolean for exception level el.
-// // If in_d is TRUE then PARTID is from MPAMel_ELx.PARTID_I and
+// // If in_d is true then PARTID is from MPAMel_ELx.PARTID_I and
 // // otherwise from MPAMel_ELx.PARTID_D.
-// // If in_sm is TRUE then PARTID is from MPAMSM_EL1.PARTID_D.
+// // If in_sm is true then PARTID is from MPAMSM_EL1.PARTID_D.
 
 // (PARTIDType, boolean) GenPARTID(bits(2) el, boolean in_d, boolean in_sm)
 //    PARTIDType partidel = GetMPAM_PARTID(el, in_d, in_sm);
 //    PARTIDType partid_max = MPAMIDR_EL1.PARTID_MAX;
 //    if UInt(partidel) > UInt(partid_max) then
-//        return (DEFAULT_PARTID, TRUE);
+//        return (DEFAULT_PARTID, true);
 //    if MPAMIsVirtual(el) then
 //        return MAP_vPARTID(partidel);
 //    else
-//        return (partidel, FALSE);
+//        return (partidel, false);
 
 // Library pseudocode for shared/functions/mpam/GenPMG
 
@@ -235,7 +248,7 @@
 // // ========
 // // Returns PMG for exception level el and I- or D-side (in_d).
 // // If PARTID generation (GenPARTID) encountered an error, GenPMG() should be
-// // called with partid_err as TRUE.
+// // called with partid_err as true.
 
 // PMGType GenPMG(bits(2) el, boolean in_d, boolean in_sm, boolean partid_err)
 //    integer pmg_max = UInt(MPAMIDR_EL1.PMG_MAX);
@@ -253,9 +266,9 @@
 // // GetMPAM_PARTID()
 // // ================
 // // Returns a PARTID from one of the MPAMn_ELx or MPAMSM_EL1 registers.
-// // If in_sm is TRUE, the MPAMSM_EL1 register is used. Otherwise,
+// // If in_sm is true, the MPAMSM_EL1 register is used. Otherwise,
 // // MPAMn selects the MPAMn_ELx register used.
-// // If in_d is TRUE, selects the PARTID_I field of that
+// // If in_d is true, selects the PARTID_I field of that
 // // register.  Otherwise, selects the PARTID_D field.
 
 // PARTIDType GetMPAM_PARTID(bits(2) MPAMn, boolean in_d, boolean in_sm)
@@ -286,9 +299,9 @@
 // // GetMPAM_PMG()
 // // =============
 // // Returns a PMG from one of the MPAMn_ELx or MPAMSM_EL1 registers.
-// // If in_sm is TRUE, the MPAMSM_EL1 register is used. Otherwise,
+// // If in_sm is true, the MPAMSM_EL1 register is used. Otherwise,
 // // MPAMn selects the MPAMn_ELx register used.
-// // If in_d is TRUE, selects the PMG_I field of that
+// // If in_d is true, selects the PMG_I field of that
 // // register.  Otherwise, selects the PMG_D field.
 
 // PMGType GetMPAM_PMG(bits(2) MPAMn, boolean in_d, boolean in_sm)
@@ -342,18 +355,18 @@
 //    if MPAMVPMV_EL2<virt> == '1' then
 //        // vpartid has a valid mapping so access the map.
 //        ret = mapvpmw(virt);
-//        err = FALSE;
+//        err = false;
 
 //    // Is the default virtual PARTID valid?
 //    elsif MPAMVPMV_EL2<0> == '1' then
 //        // Yes, so use default mapping for vpartid == 0.
 //        ret = MPAMVPM0_EL2<0 +: 16>;
-//        err = FALSE;
+//        err = false;
 
 //    // Neither is valid so use default physical PARTID.
 //    else
 //        ret = DEFAULT_PARTID;
-//        err = TRUE;
+//        err = true;
 
 //    // Check that the physical PARTID is in-range.
 //    // This physical PARTID came from a virtual mapping entry.
@@ -361,7 +374,7 @@
 //    if UInt(ret) > partid_max then
 //        // Out of range, so return default physical PARTID
 //        ret = DEFAULT_PARTID;
-//        err = TRUE;
+//        err = true;
 //    return (ret, err);
 
 // Library pseudocode for shared/functions/mpam/MPAM
@@ -405,7 +418,7 @@ pub struct MPAMinfo {
 
 // // MPAMIsEnabled()
 // // ===============
-// // Returns TRUE if MPAMisEnabled.
+// // Returns true if MPAMisEnabled.
 
 // boolean MPAMIsEnabled()
 //    el = HighestEL();
@@ -418,7 +431,7 @@ pub struct MPAMinfo {
 
 // // MPAMIsVirtual()
 // // ===============
-// // Returns TRUE if MPAM is configured to be virtual at EL.
+// // Returns true if MPAM is configured to be virtual at EL.
 
 // boolean MPAMIsVirtual(bits(2) el)
 //    return (MPAMIDR_EL1.HAS_HCR == '1' && EL2Enabled() &&
